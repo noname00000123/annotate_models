@@ -68,11 +68,11 @@ module AnnotateModels
   class << self
     def annotate_pattern(options = {})
       if options[:wrapper_open]
-        return /(?:^\n?# (?:#{options[:wrapper_open]}).*\n?# (?:#{COMPAT_PREFIX}|#{COMPAT_PREFIX_MD}).*?\n(#.*\n)*\n*)|^\n?# (?:#{COMPAT_PREFIX}|#{COMPAT_PREFIX_MD}).*?\n(#.*\n)*\n*/
+        return /(?:^\n?#\s(?:#{options[:wrapper_open]}).*\n?#\s(?:#{COMPAT_PREFIX}|#{COMPAT_PREFIX_MD}).*?\n(#.*\n)*(?:#\s#{options[:wrapper_close]})\s)|^\n?#\s(?:#{COMPAT_PREFIX}|#{COMPAT_PREFIX_MD}).*?\n(#.*\n)*(?:#\s#{options[:wrapper_close]})\s/
       end
       /^\n?# (?:#{COMPAT_PREFIX}|#{COMPAT_PREFIX_MD}).*?\n(#.*\n)*\n*/
     end
-
+    
     def model_dir
       @model_dir.is_a?(Array) ? @model_dir : [@model_dir || 'app/models']
     end
@@ -405,16 +405,17 @@ module AnnotateModels
         if old_columns == new_columns && !options[:force]
           return false
         else
-          # Replace inline the old schema info with the new schema info
-          new_content = old_content.sub(annotate_pattern(options), info_block + "\n")
-
-          if new_content.end_with?(info_block + "\n")
-            new_content = old_content.sub(annotate_pattern(options), "\n" + info_block)
-          end
-
           wrapper_open = options[:wrapper_open] ? "# #{options[:wrapper_open]}\n" : ""
           wrapper_close = options[:wrapper_close] ? "# #{options[:wrapper_close]}\n" : ""
           wrapped_info_block = "#{wrapper_open}#{info_block}#{wrapper_close}"
+          
+          # Replace inline the old schema info with the new schema info
+          new_content = old_content.sub(annotate_pattern(options), wrapped_info_block)
+
+          if new_content.end_with?(info_block + "\n")
+            new_content = old_content.sub(annotate_pattern(options), "\n" + wrapped_info_block)
+          end
+          
           # if there *was* no old schema info (no substitution happened) or :force was passed,
           # we simply need to insert it in correct position
           if new_content == old_content || options[:force]
@@ -424,7 +425,7 @@ module AnnotateModels
             if %w(after bottom).include?(options[position].to_s)
               new_content = magic_comments.join + (old_content.rstrip + "\n\n" + wrapped_info_block)
             else
-              new_content = magic_comments.join + wrapped_info_block + "\n" + old_content
+              new_content = magic_comments.join + wrapped_info_block + old_content
             end
           end
 
