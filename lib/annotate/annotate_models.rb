@@ -391,9 +391,8 @@ module AnnotateModels
         return false if old_content =~ /# -\*- SkipSchemaAnnotations.*\n/
 
         # Ignore the Schema version line because it changes with each migration
-        header_pattern = /(^# Table name:.*?\n(#.*[\r]?\n)*[\r]?)/
-        old_header = old_content.match(header_pattern).to_s
-        new_header = info_block.match(header_pattern).to_s
+        old_header = old_content.match(/(^# Table name:.*?\n(#.*[\r]?\n)*(?=# @!schema))/).to_s
+        new_header = info_block.match(/(^# Table name:.*?\n(#.*[\r]?\n)*[\r]?)/).to_s
 
         column_pattern = /^#[\t ]+[\w\*`]+[\t ]+.+$/
         old_columns = old_header && old_header.scan(column_pattern).sort
