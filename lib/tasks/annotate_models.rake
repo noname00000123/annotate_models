@@ -3,6 +3,7 @@ annotate_lib = File.expand_path(File.dirname(File.dirname(__FILE__)))
 unless ENV['is_cli']
   task :set_annotation_options
   task annotate_models: :set_annotation_options
+  task remove_annotation: :set_annotation_options
 end
 
 desc 'Add schema information (as comments) to model and fixture files'
@@ -59,5 +60,7 @@ task remove_annotation: :environment do
   options[:root_dir] = ENV['root_dir']
   options[:require] = ENV['require'] ? ENV['require'].split(',') : []
   options[:trace] = Annotate.true?(ENV['trace'])
+  options[:wrapper_open] = Annotate.fallback(ENV['wrapper_open'], ENV['wrapper'])
+  options[:wrapper_close] = Annotate.fallback(ENV['wrapper_close'], ENV['wrapper'])
   AnnotateModels.remove_annotations(options)
 end
