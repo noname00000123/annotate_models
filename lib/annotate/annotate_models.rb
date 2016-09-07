@@ -371,6 +371,33 @@ module AnnotateModels
 
       fk_info
     end
+    
+    # Generate list of association names and macros with YARD object links
+    # @todo add :annotate_associations option
+    def get_associations_info(file_name, options={})
+      return unless options[:format_markdown] # && options[:annotate_associations]
+
+      klass = get_model_class(file_name)
+
+      associations = "# ---\n# ## Associations\n#\n"
+
+      klass.reflections.each do |name, assoc|
+        macro = "**#{assoc.macro}:**"
+        (1..29 - macro.length).each { macro += ' ' }
+
+        association = "# - #{macro}{##{name}}"
+
+        association += if assoc.is_a?(ActiveRecord::Reflection::ThroughReflection)
+          " {#{assoc.delegate_reflection.klass.name}} *through* {##{assoc.options[:through]}}\n"
+        else
+          " {#{assoc.klass.name}}\n"
+        end
+
+        associations << association
+      end
+
+      associations << "#\n# ---\n#\n"
+    end
 
     # Add a schema block to a file. If the file already contains
     # a schema info block (a comment starting with "== Schema Information"), check if it
@@ -406,7 +433,8 @@ module AnnotateModels
         else
           wrapper_open = options[:wrapper_open] ? "# #{options[:wrapper_open]}\n" : ""
           wrapper_close = options[:wrapper_close] ? "# #{options[:wrapper_close]}\n" : ""
-          wrapped_info_block = "#{wrapper_open}#{info_block}#{wrapper_close}"
+          associations_info = get_associations_info(file_name, options)
+          wrapped_info_block = "#{wrapper_open}#{info_block}#{associations_info}#{wrapper_close}"
           
           # Replace inline the old schema info with the new schema info
           new_content = old_content.sub(annotate_pattern(options), wrapped_info_block)
