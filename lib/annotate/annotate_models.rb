@@ -387,8 +387,12 @@ module AnnotateModels
 
         association += if assoc.is_a?(ActiveRecord::Reflection::ThroughReflection)
           " {#{assoc.delegate_reflection.klass.name}} *through* {##{assoc.options[:through]}}\n"
+        elsif Object.const_defined?(assoc.class_name)
+          " {#{assoc.class_name}}\n"
+        elsif assoc.options.key?(:polymorphic)
+          " {#{assoc.name}\n"
         else
-          " {#{assoc.klass.name}}\n"
+          " {#{assoc.class_name}}\n"
         end
 
         associations << association
