@@ -515,7 +515,7 @@ module AnnotateModels
         model_file_name = File.join(file)
         annotated = []
 
-        if annotate_one_file(model_file_name, info, :position_in_class, options_with_position(options, :position_in_class))
+        if annotate_one_file(model_file_name, info, associations_info, :position_in_class, options_with_position(options, :position_in_class))
           annotated << model_file_name
         end
 
