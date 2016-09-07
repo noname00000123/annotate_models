@@ -374,10 +374,8 @@ module AnnotateModels
     
     # Generate list of association names and macros with YARD object links
     # @todo add :annotate_associations option
-    def get_associations_info(file_name, options={})
+    def get_associations_info(klass, options={})
       return unless options[:format_markdown] # && options[:annotate_associations]
-
-      klass = get_model_class(file_name)
 
       associations = "# ---\n# ## Associations\n#\n"
 
@@ -412,7 +410,7 @@ module AnnotateModels
     #  :position_in_*<Symbol>:: where to place the annotated section in fixture or model file,
     #                           :before, :top, :after or :bottom. Default is :before.
     #
-    def annotate_one_file(file_name, info_block, position, options={})
+    def annotate_one_file(file_name, info_block, associations_info_block, position, options={})
       if File.exist?(file_name)
         old_content = File.read(file_name)
         return false if old_content =~ /# -\*- SkipSchemaAnnotations.*\n/
@@ -433,8 +431,7 @@ module AnnotateModels
         else
           wrapper_open = options[:wrapper_open] ? "# #{options[:wrapper_open]}\n" : ""
           wrapper_close = options[:wrapper_close] ? "# #{options[:wrapper_close]}\n" : ""
-          associations_info = get_associations_info(file_name, options)
-          wrapped_info_block = "#{wrapper_open}#{info_block}#{associations_info}#{wrapper_close}"
+          wrapped_info_block = "#{wrapper_open}#{info_block}#{associations_info_block}#{wrapper_close}"
           
           # Replace inline the old schema info with the new schema info
           new_content = old_content.sub(annotate_pattern(options), wrapped_info_block)
@@ -512,6 +509,7 @@ module AnnotateModels
       begin
         klass.reset_column_information
         info = get_schema_info(klass, header, options)
+        associations_info = get_associations_info(klass, options)
         model_name = klass.name.underscore
         table_name = klass.table_name
         model_file_name = File.join(file)
