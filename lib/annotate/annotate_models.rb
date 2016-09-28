@@ -68,9 +68,10 @@ module AnnotateModels
   class << self
     def annotate_pattern(options = {})
       if options[:wrapper_open]
-        return /(?:^\n?#\s(?:#{options[:wrapper_open]}).*\n?#\s(?:#{COMPAT_PREFIX}|#{COMPAT_PREFIX_MD}).*?\n(#.*\n)*(?:#\s#{options[:wrapper_close]})\s)|^\n?#\s(?:#{COMPAT_PREFIX}|#{COMPAT_PREFIX_MD}).*?\n(#.*\n)*(?:#\s#{options[:wrapper_close]})\s/
+        /(?:\n?#\s(?:#{options[:wrapper_open]}).*\n?(\n\s*#.*)*(?:#{options[:wrapper_close]}))\s/
+      else
+        /^\n?# (?:#{COMPAT_PREFIX}|#{COMPAT_PREFIX_MD}).*?\n(#.*\n)*\n*/
       end
-      /^\n?# (?:#{COMPAT_PREFIX}|#{COMPAT_PREFIX_MD}).*?\n(#.*\n)*\n*/
     end
     
     def model_dir
@@ -387,15 +388,16 @@ module AnnotateModels
         
         # next if assoc.options.key?(:polymorphic)
         
-        association += if assoc.is_a?(ActiveRecord::Reflection::ThroughReflection)
-          " {#{assoc.delegate_reflection.klass.name}} *through* {##{assoc.options[:through]}}\n"
-        elsif Object.const_defined?(assoc.class_name)
-          " {#{assoc.class_name}}\n"
-        elsif assoc.options.key?(:polymorphic)
-          "\n"
-        else
-          " {#{assoc.class_name}}\n"
-        end
+        association <<
+          if assoc.is_a?(ActiveRecord::Reflection::ThroughReflection)
+            " {#{assoc.delegate_reflection.klass.name}} *through* {##{assoc.options[:through]}}\n"
+          elsif Object.const_defined?(assoc.class_name)
+            " {#{assoc.class_name}}\n"
+          elsif assoc.options.key?(:polymorphic)
+            "\n"
+          else
+            " {#{assoc.class_name}}\n"
+          end
 
         associations << association
       end
