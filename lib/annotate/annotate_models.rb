@@ -66,6 +66,10 @@ module AnnotateModels
   NO_DEFAULT_COL_TYPES = %w(json jsonb hstore)
 
   class << self
+    def indentation_pattern(options = {})
+      /([^\n]\s.*)(#\s#{options[:wrapper_open]})/ if options[:wrapper_open]
+    end
+    
     def annotate_pattern(options = {})
       if options[:wrapper_open]
         /(?:\n?#\s(?:#{options[:wrapper_open]}).*\n?(\n\s*#.*)*(?:#{options[:wrapper_close]}))\s/
@@ -437,9 +441,23 @@ module AnnotateModels
         if old_columns == new_columns && !options[:force]
           return false
         else
-          wrapper_open = options[:wrapper_open] ? "# #{options[:wrapper_open]}\n" : ""
-          wrapper_close = options[:wrapper_close] ? "# #{options[:wrapper_close]}\n" : ""
-          wrapped_info_block = "#{wrapper_open}#{info_block}#{associations_info_block}#{wrapper_close}"
+          indentation =
+            options[:wrapper_open] ? old_content.match(indentation_pattern(options))[1] : ""
+
+          associations_info_block = associations_info_block.each_line.with_object('') do |l, str|
+            str << l.insert(0, indentation)
+          end
+
+          info_block = info_block.each_line.with_object('') do |l, str|
+            str << l.insert(0, indentation)
+          end
+
+          wrapper_open =
+            options[:wrapper_open] ? "# #{options[:wrapper_open]}\n" : ""
+          wrapper_close =
+            options[:wrapper_close] ? "#{indentation}# #{options[:wrapper_close]}\n" : ""
+          wrapped_info_block =
+            "#{wrapper_open}#{info_block}#{associations_info_block}#{wrapper_close}"
           
           # Replace inline the old schema info with the new schema info
           new_content = old_content.sub(annotate_pattern(options), wrapped_info_block)
