@@ -1,7 +1,20 @@
+require 'coveralls'
+require 'codeclimate-test-reporter'
+require 'simplecov'
+
+SimpleCov.formatter = SimpleCov::Formatter::MultiFormatter.new([
+    Coveralls::SimpleCov::Formatter,
+    SimpleCov::Formatter::HTMLFormatter,
+    CodeClimate::TestReporter::Formatter
+])
+
+SimpleCov.start
+
 require 'rubygems'
 require 'bundler'
 Bundler.setup
 
+require 'rake'
 require 'rspec'
 require 'wrong/adapters/rspec'
 
@@ -14,14 +27,15 @@ require 'active_support/core_ext/class/subclasses'
 require 'active_support/core_ext/string/inflections'
 require 'annotate'
 
+require 'rubocop/rake_task'
+RuboCop::RakeTask.new
+Rake::Task['rubocop'].invoke
+
 module Annotate
   module Integration
     ABSOLUTE_GEM_ROOT=File.expand_path('../../', __FILE__)
 
-    CRUFT_PATTERNS=[
-      "%SCENARIO%/bin/*", "%SCENARIO%/log/*", "%SCENARIO%/tmp/*",
-      "%SCENARIO%/.bundle"
-    ]
+    CRUFT_PATTERNS= %w(%SCENARIO%/bin/* %SCENARIO%/log/* %SCENARIO%/tmp/* %SCENARIO%/.bundle)
     SCENARIO_HOME=File.join(File.dirname(__FILE__), 'integration')
     SCENARIOS=Dir.glob("#{SCENARIO_HOME}/*").
       select { |candidate| File.directory?(candidate) }.
@@ -40,7 +54,7 @@ module Annotate
     end
 
     def self.nuke_all_cruft
-      SCENARIOS.each do |test_rig, base_dir, test_name|
+      SCENARIOS.each do |test_rig, _base_dir, _test_name|
         nuke_cruft(test_rig)
       end
     end

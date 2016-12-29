@@ -5,20 +5,22 @@ require 'annotate/active_record_patch'
 require 'active_support/core_ext/string'
 
 describe AnnotateModels do
-  def mock_foreign_key(name, from_column, to_table, to_column = 'id')
+  def mock_foreign_key(name, from_column, to_table, to_column = 'id', constraints = {})
     double("ForeignKeyDefinition",
-      :name         => name,
-      :column       => from_column,
-      :to_table     => to_table,
-      :primary_key  => to_column,
+           :name         => name,
+           :column       => from_column,
+           :to_table     => to_table,
+           :primary_key  => to_column,
+           :on_delete    => constraints[:on_delete],
+           :on_update    => constraints[:on_update]
     )
   end
 
   def mock_connection(indexes = [], foreign_keys = [])
     double("Conn",
-      :indexes      => indexes,
-      :foreign_keys => foreign_keys,
-      :supports_foreign_keys? => true,
+           :indexes      => indexes,
+           :foreign_keys => foreign_keys,
+           :supports_foreign_keys? => true,
     )
   end
 
@@ -47,7 +49,8 @@ describe AnnotateModels do
 
     stubs = default_options.dup
     stubs.merge!(options)
-    stubs.merge!(:name => name, :type => type)
+    stubs[:name] = name
+    stubs[:type] = type
 
     double("Column", stubs)
   end
@@ -115,6 +118,7 @@ EOS
 #
 EOS
   end
+
   it "should get schema info with enum type " do
     klass = mock_class(:users, nil, [
                                      mock_column(:id, :integer),
@@ -128,6 +132,29 @@ EOS
 #
 #  id   :integer          not null
 #  name :enum             not null, (enum1, enum2)
+#
+EOS
+  end
+
+  it "should get schema info with unsigned" do
+    klass = mock_class(:users, nil, [
+                                     mock_column(:id, :integer),
+                                     mock_column(:integer, :integer, :unsigned? => true),
+                                     mock_column(:bigint,  :bigint,  :unsigned? => true),
+                                     mock_column(:float,   :float,   :unsigned? => true),
+                                     mock_column(:decimal, :decimal, :unsigned? => true, :precision => 10, :scale => 2),
+                                    ])
+
+    expect(AnnotateModels.get_schema_info(klass, "Schema Info")).to eql(<<-EOS)
+# Schema Info
+#
+# Table name: users
+#
+#  id      :integer          not null
+#  integer :integer          unsigned, not null
+#  bigint  :bigint           unsigned, not null
+#  float   :float            unsigned, not null
+#  decimal :decimal(10, 2)   unsigned, not null
 #
 EOS
   end
@@ -155,13 +182,13 @@ EOS
               mock_column(:id, :integer),
               mock_column(:foreign_thing_id, :integer),
             ],
-            [
-              mock_foreign_key(
-                'fk_rails_02e851e3b7',
-                'foreign_thing_id',
-                'foreign_things'
-              )
-            ])
+                              [
+                                mock_foreign_key(
+                                  'fk_rails_02e851e3b7',
+                                  'foreign_thing_id',
+                                  'foreign_things'
+                                )
+                              ])
             expect(AnnotateModels.get_schema_info(klass, "Schema Info", :show_foreign_keys => true)).to eql(<<-EOS)
 # Schema Info
 #
@@ -173,6 +200,36 @@ EOS
 # Foreign Keys
 #
 #  fk_rails_02e851e3b7  (foreign_thing_id => foreign_things.id)
+#
+EOS
+  end
+
+  it "should get foreign key info if on_delete/on_update options present" do
+    klass = mock_class(:users, :id, [
+       mock_column(:id, :integer),
+       mock_column(:foreign_thing_id, :integer),
+     ],
+                       [
+                         mock_foreign_key(
+                           'fk_rails_02e851e3b7',
+                           'foreign_thing_id',
+                           'foreign_things',
+                           'id',
+                           on_delete: 'on_delete_value',
+                           on_update: 'on_update_value'
+                         )
+                       ])
+    expect(AnnotateModels.get_schema_info(klass, "Schema Info", :show_foreign_keys => true)).to eql(<<-EOS)
+# Schema Info
+#
+# Table name: users
+#
+#  id               :integer          not null, primary key
+#  foreign_thing_id :integer          not null
+#
+# Foreign Keys
+#
+#  fk_rails_02e851e3b7  (foreign_thing_id => foreign_things.id) ON DELETE => on_delete_value ON UPDATE => on_update_value
 #
 EOS
   end
@@ -198,56 +255,134 @@ EOS
   describe "#get_schema_info with custom options" do
     def self.when_called_with(options = {})
       expected = options.delete(:returns)
+      default_columns = [
+        [:id, :integer, { :limit => 8 }],
+        [:active, :boolean, { :limit => 1 }],
+        [:name, :string, { :limit => 50 }],
+        [:notes, :text, { :limit => 55 }]
+      ]
 
       it "should work with options = #{options}" do
-        klass = mock_class(:users, :id, [
-                                       mock_column(:id,     :integer, :limit => 8),
-                                       mock_column(:active, :boolean, :limit => 1),
-                                       mock_column(:name,   :string,  :limit => 50),
-                                       mock_column(:notes,  :text,    :limit => 55),
-                                      ])
+        with_columns = (options.delete(:with_columns) || default_columns).map do |column|
+          mock_column(column[0], column[1], column[2])
+        end
+
+        klass = mock_class(:users, :id, with_columns)
+
         schema_info = AnnotateModels.get_schema_info(klass, "Schema Info", options)
         expect(schema_info).to eql(expected)
       end
     end
 
-    when_called_with hide_limit_column_types: '', returns: <<-EOS.strip_heredoc
-      # Schema Info
-      #
-      # Table name: users
-      #
-      #  id     :integer          not null, primary key
-      #  active :boolean          not null
-      #  name   :string(50)       not null
-      #  notes  :text(55)         not null
-      #
-    EOS
+    describe 'hide_limit_column_types option' do
+      when_called_with hide_limit_column_types: '', returns: <<-EOS.strip_heredoc
+        # Schema Info
+        #
+        # Table name: users
+        #
+        #  id     :integer          not null, primary key
+        #  active :boolean          not null
+        #  name   :string(50)       not null
+        #  notes  :text(55)         not null
+        #
+      EOS
 
-    when_called_with hide_limit_column_types: 'integer,boolean', returns:
-      <<-EOS.strip_heredoc
-      # Schema Info
-      #
-      # Table name: users
-      #
-      #  id     :integer          not null, primary key
-      #  active :boolean          not null
-      #  name   :string(50)       not null
-      #  notes  :text(55)         not null
-      #
-    EOS
-    
-    when_called_with hide_limit_column_types: 'integer,boolean,string,text', returns:
-      <<-EOS.strip_heredoc
-      # Schema Info
-      #
-      # Table name: users
-      #
-      #  id     :integer          not null, primary key
-      #  active :boolean          not null
-      #  name   :string           not null
-      #  notes  :text             not null
-      #
-    EOS
+      when_called_with hide_limit_column_types: 'integer,boolean', returns:
+        <<-EOS.strip_heredoc
+        # Schema Info
+        #
+        # Table name: users
+        #
+        #  id     :integer          not null, primary key
+        #  active :boolean          not null
+        #  name   :string(50)       not null
+        #  notes  :text(55)         not null
+        #
+      EOS
+
+      when_called_with hide_limit_column_types: 'integer,boolean,string,text', returns:
+        <<-EOS.strip_heredoc
+        # Schema Info
+        #
+        # Table name: users
+        #
+        #  id     :integer          not null, primary key
+        #  active :boolean          not null
+        #  name   :string           not null
+        #  notes  :text             not null
+        #
+      EOS
+    end
+
+    describe 'hide_default_column_types option' do
+      mocked_columns_without_id = [
+        [:profile, :json, default: {}],
+        [:settings, :jsonb, default: {}],
+        [:parameters, :hstore, default: {}]
+      ]
+
+      when_called_with hide_default_column_types: '',
+                       with_columns: mocked_columns_without_id,
+                       returns:
+        <<-EOS.strip_heredoc
+        # Schema Info
+        #
+        # Table name: users
+        #
+        #  profile    :json             not null
+        #  settings   :jsonb            not null
+        #  parameters :hstore           not null
+        #
+      EOS
+
+      when_called_with hide_default_column_types: 'skip',
+                       with_columns: mocked_columns_without_id,
+                       returns:
+        <<-EOS.strip_heredoc
+        # Schema Info
+        #
+        # Table name: users
+        #
+        #  profile    :json             default({}), not null
+        #  settings   :jsonb            default({}), not null
+        #  parameters :hstore           default({}), not null
+        #
+      EOS
+
+      when_called_with hide_default_column_types: 'json',
+                       with_columns: mocked_columns_without_id,
+                       returns:
+        <<-EOS.strip_heredoc
+        # Schema Info
+        #
+        # Table name: users
+        #
+        #  profile    :json             not null
+        #  settings   :jsonb            default({}), not null
+        #  parameters :hstore           default({}), not null
+        #
+      EOS
+    end
+
+    describe 'classified_sort option' do
+      mocked_columns_without_id = [
+        [:active, :boolean, { :limit => 1 }],
+        [:name, :string, { :limit => 50 }],
+        [:notes, :text, { :limit => 55 }]
+      ]
+
+      when_called_with classified_sort: 'yes', with_columns: mocked_columns_without_id, returns:
+        <<-EOS.strip_heredoc
+        # Schema Info
+        #
+        # Table name: users
+        #
+        #  active :boolean          not null
+        #  name   :string(50)       not null
+        #  notes  :text(55)         not null
+        #
+      EOS
+    end
   end
 
   describe "#get_model_class" do
@@ -255,7 +390,7 @@ EOS
 
     module ::ActiveRecord
       class Base
-        def self.has_many name
+        def self.has_many _name
         end
       end
     end
@@ -494,6 +629,55 @@ class Foo < ActiveRecord::Base
 end
       EOS
     end
+
+    it "should remove opening wrapper" do
+      path = create "opening_wrapper.rb", <<-EOS
+# wrapper
+# == Schema Information
+#
+# Table name: foo
+#
+#  id                  :integer         not null, primary key
+#  created_at          :datetime
+#  updated_at          :datetime
+#
+
+class Foo < ActiveRecord::Base
+end
+      EOS
+
+      AnnotateModels.remove_annotation_of_file(path, wrapper_open: 'wrapper')
+
+      expect(content(path)).to eq <<-EOS
+class Foo < ActiveRecord::Base
+end
+      EOS
+    end
+
+    it "should remove closing wrapper" do
+      path = create "closing_wrapper.rb", <<-EOS
+class Foo < ActiveRecord::Base
+end
+
+# == Schema Information
+#
+# Table name: foo
+#
+#  id                  :integer         not null, primary key
+#  created_at          :datetime
+#  updated_at          :datetime
+#
+# wrapper
+
+      EOS
+
+      AnnotateModels.remove_annotation_of_file(path, wrapper_close: 'wrapper')
+
+      expect(content(path)).to eq <<-EOS
+class Foo < ActiveRecord::Base
+end
+      EOS
+    end
   end
 
   describe '#resolve_filename' do
@@ -625,7 +809,7 @@ end
       before do
         annotate_one_file :position => :before
         another_schema_info = AnnotateModels.get_schema_info(mock_class(:users, :id, [mock_column(:id, :integer),]),
-                                                           "== Schema Info")
+                                                             "== Schema Info")
         @schema_info = another_schema_info
       end
 
@@ -649,7 +833,7 @@ end
       before do
         annotate_one_file :position => :after
         another_schema_info = AnnotateModels.get_schema_info(mock_class(:users, :id, [mock_column(:id, :integer),]),
-                                                           "== Schema Info")
+                                                             "== Schema Info")
         @schema_info = another_schema_info
       end
 
@@ -780,7 +964,7 @@ end
     after { Object.send :remove_const, 'Foo' }
 
     it 'skips attempt to annotate if no table exists for model' do
-      annotate_model_file = AnnotateModels.annotate_model_file([], 'foo.rb', nil, nil)
+      annotate_model_file = AnnotateModels.annotate_model_file([], 'foo.rb', nil, {})
 
       expect(annotate_model_file).to eq nil
     end

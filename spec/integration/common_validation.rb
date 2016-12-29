@@ -53,14 +53,14 @@ module Annotate
         File.read("test/fixtures/tasks.yml").should == fixture
       end
 
-    protected
+      protected
 
       def self.apply_annotation(test_rig, fname, annotation, place_before=true)
         corpus = File.read(File.join(test_rig, fname))
-        if(place_before)
-          corpus = annotation + "\n" + corpus
+        if place_before
+          annotation + "\n" + corpus
         else
-          corpus = corpus + "\n" + annotation
+          corpus + "\n" + annotation
         end
       end
     end
