@@ -22,6 +22,6 @@ Gem::Specification.new do |s|
   s.summary = 'Annotates Rails Models, routes, fixtures, and others based on the database schema.'
 
   s.specification_version = 4 if s.respond_to? :specification_version
-  s.add_runtime_dependency(%q<rake>, ['>= 10.4'])
-  s.add_runtime_dependency(%q<activerecord>, ['>= 3.2', '< 6.0'])
+  s.add_runtime_dependency('rake', '~> 12')
+  s.add_runtime_dependency('activerecord', '>= 4.2.5')
 end

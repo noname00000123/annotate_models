@@ -1,6 +1,6 @@
 source 'https://rubygems.org'
 
-gem 'rake', '>= 10.4.2', require: false
+gem 'rake', '~> 12', require: false
 gem 'activerecord', '>= 4.2.5', require: false
 
 group :development do
